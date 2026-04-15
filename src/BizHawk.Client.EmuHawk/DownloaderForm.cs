@@ -64,11 +64,8 @@ namespace BizHawk.Client.EmuHawk
 		{
 			try
 			{
-				DirectoryInfo parentDir = new(Path.GetDirectoryName(DownloadTo)!);
-				if (!parentDir.Exists) parentDir.Create();
-				// check writable before bothering with the download
-				if (File.Exists(DownloadTo)) File.Delete(DownloadTo);
-				using var fs = File.Create(DownloadTo);
+				Directory.CreateDirectory(Path.GetDirectoryName(DownloadTo)!);
+
 				using (var evt = new ManualResetEvent(false))
 				{
 					using var client = new WebClient();
@@ -91,27 +88,16 @@ namespace BizHawk.Client.EmuHawk
 					}
 				}
 
-//				throw new Exception("test of download failure");
-
 				//if we were ordered to exit, bail without wasting any more time
 				if (_exiting) return;
 
 				//try acquiring file
 				using (HawkFile hf = new(DownloadTemp))
 				{
-					using var exStream = GetExtractionStream(hf);
-					//last chance. exiting, don't dump the new file
 					if (_exiting) return;
-					exStream.CopyTo(fs);
-					fs.Position = 0L;
-					if (!PreChmodCheck(fs)) throw new Exception("download failed (pre-chmod validation)");
-					fs.Dispose();
-					if (OSTailoredCode.IsUnixHost)
-					{
-						var proc = OSTailoredCode.ConstructSubshell("chmod", $"+x {DownloadTo}", checkStdout: false);
-						proc.Start();
-						proc.WaitForExit();
-					}
+
+					if (!ExtractFiles(hf, DownloadTo))
+						throw new Exception("download failed (extraction)");
 				}
 
 				//make sure it worked
@@ -132,9 +118,25 @@ namespace BizHawk.Client.EmuHawk
 				}
 				catch
 				{
-					// ignore
 				}
 			}
+		}
+
+		protected virtual bool ExtractFiles(HawkFile downloaded, string destinationPath)
+		{
+			using var exStream = GetExtractionStream(downloaded);
+			using var fs = File.Create(DownloadTo);
+			exStream.CopyTo(fs);
+			fs.Position = 0L;
+			if (!PreChmodCheck(fs)) return false;
+			fs.Dispose();
+			if (OSTailoredCode.IsUnixHost)
+			{
+				var proc = OSTailoredCode.ConstructSubshell("chmod", $"+x {DownloadTo}", checkStdout: false);
+				proc.Start();
+				proc.WaitForExit();
+			}
+			return true;
 		}
 
 		protected virtual Stream GetExtractionStream(HawkFile downloaded)

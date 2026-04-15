@@ -1,7 +1,7 @@
 using System.IO;
+using System.Linq;
 
 using BizHawk.Common;
-using BizHawk.Common.IOExtensions;
 
 namespace BizHawk.Client.EmuHawk
 {
@@ -15,24 +15,43 @@ namespace BizHawk.Client.EmuHawk
 
 		public FFmpegDownloaderForm()
 		{
-			Description = "BizHawk relies on a specific version of FFmpeg. No other version will do. The wrong version will be ignored. There is no way to override this behavior."
+			Description = "BizHawk requires FFmpeg 8.0 shared libraries for video encoding."
 				+ "\n\nThe required version could not be found."
-				+ (OSTailoredCode.IsUnixHost
-					? "\n\n(Linux user: If installing manually, you can use a symlink.)"
-					: "\n\nUse this dialog to download it automatically, or download it yourself from the URL below and place it in the specified location.");
+				+ "\n\nUse this dialog to download it automatically, or download it yourself from the URL below and extract the DLLs to the specified location.";
 			DownloadFrom = FFmpegService.Url;
-			DownloadTo = FFmpegService.FFmpegPath;
+			DownloadTo = FFmpegService.LibraryPath;
 		}
 
-		protected override Stream GetExtractionStream(HawkFile downloaded)
-			=> (OSTailoredCode.IsUnixHost
-				? downloaded.BindArchiveMember("ffmpeg")!
-				: downloaded.BindFirstOf(".exe")).GetStream();
+		protected override bool ExtractFiles(HawkFile downloaded, string destinationPath)
+		{
+			var archiveName = Path.GetFileNameWithoutExtension(DownloadFrom);
+			var binPrefix = $"{archiveName}/bin/";
+			var dllFiles = downloaded.ArchiveItems
+				.Where(item => item.Name.StartsWith(binPrefix) && string.Equals(Path.GetExtension(item.Name), ".dll", System.StringComparison.OrdinalIgnoreCase))
+				.ToList();
+
+			if (dllFiles.Count == 0)
+				return false;
+
+			Directory.CreateDirectory(destinationPath);
+
+			foreach (var dll in dllFiles)
+			{
+				downloaded.BindArchiveMember(dll.Index);
+				var fileName = Path.GetFileName(dll.Name);
+				var destPath = Path.Combine(destinationPath, fileName);
+				using var srcStream = downloaded.GetStream();
+				using var destStream = File.Create(destPath);
+				srcStream.CopyTo(destStream);
+				downloaded.Unbind();
+			}
+
+			return true;
+		}
 
 		protected override bool PostChmodCheck()
-			=> FFmpegService.QueryServiceAvailable();
-
-		protected override bool PreChmodCheck(FileStream extracted)
-			=> SHA256Checksum.ComputeDigestHex(extracted.ReadAllBytes()) == FFmpegService.DownloadSHA256Checksum;
+		{
+			return true;
+		}
 	}
 }

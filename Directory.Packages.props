@@ -49,5 +49,6 @@
 		<PackageVersion Include="Vortice.D3DCompiler" Version="2.4.2" /> <!-- last version with .NET Standard 2.0 support -->
 		<PackageVersion Include="Vortice.MediaFoundation" Version="2.4.2" /> <!-- last version with .NET Standard 2.0 support -->
 		<PackageVersion Include="Vortice.XAudio2" Version="2.4.2" /> <!-- last version with .NET Standard 2.0 support -->
+                <PackageVersion Include="FFmpeg.AutoGen" Version="8.0.0" />
 	</ItemGroup>
 </Project>

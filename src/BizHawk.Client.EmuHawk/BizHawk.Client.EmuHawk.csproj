@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<TargetFramework>net48</TargetFramework>
 	</PropertyGroup>
@@ -18,6 +18,9 @@
 	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="SharpCompress" PrivateAssets="all" NoWarn="NU1902" />
+		<PackageReference Include="FFmpeg.AutoGen" />
+	</ItemGroup>
+	<ItemGroup>
 		<Reference Include="PcxFileTypePlugin.HawkQuantizer" HintPath="$(ProjectDir)../../References/PcxFileTypePlugin.HawkQuantizer.dll" Private="true" />
 		<Reference Include="NLua, Version=1.4.1.0, Culture=neutral, PublicKeyToken=null, processorArchitecture=MSIL" SpecificVersion="false" HintPath="$(ProjectDir)../../References/NLua.dll" Private="true" />
 	</ItemGroup>

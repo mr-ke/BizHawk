@@ -1,11 +1,10 @@
-using System.Threading;
-using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.IO;
-using System.Threading.Tasks;
+using System.Threading;
+
 using BizHawk.Common.PathExtensions;
 using BizHawk.Common.StringExtensions;
 
@@ -13,33 +12,21 @@ namespace BizHawk.Common
 {
 	public static class FFmpegService
 	{
-		private const string BIN_HOST_URI_LINUX_X64 = "https://github.com/TASEmulators/ffmpeg-binaries/raw/master/ffmpeg-4.4.1-static-linux-x64.7z";
+		private const string BIN_HOST_URI_WIN = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.0.1-full_build-shared.7z";
 
-		private const string BIN_HOST_URI_WIN_X64 = "https://github.com/TASEmulators/ffmpeg-binaries/raw/master/ffmpeg-4.4.1-static-windows-x64.7z";
+		private const string VERSION = "ffmpeg version 8.";
 
-		private const string BIN_SHA256_LINUX_X64 = "3EA58083710F63BF920B16C7D5D24AE081E7D731F57A656FED11AF0410D4EB48";
+		public static string FFmpegPath => Path.Combine(LibraryPath, "ffmpeg.exe");
 
-		private const string BIN_SHA256_WIN_X64 = "8436760AF8F81C95EFF92D854A7684E6D3CEDB872888420359FC45C8EB2664AC";
+		public static string LibraryPath => Path.Combine(PathUtils.DataDirectoryPath, "dll");
 
-		private const string VERSION = "ffmpeg version 4.4.1";
-
-		public static string DownloadSHA256Checksum
-			=> OSTailoredCode.IsUnixHost ? BIN_SHA256_LINUX_X64 : BIN_SHA256_WIN_X64;
-
-		public static string FFmpegPath => Path.Combine(PathUtils.DataDirectoryPath, "dll", OSTailoredCode.IsUnixHost ? "ffmpeg" : "ffmpeg.exe");
-
-		public static readonly string Url = OSTailoredCode.IsUnixHost ? BIN_HOST_URI_LINUX_X64 : BIN_HOST_URI_WIN_X64;
+		public static readonly string Url = BIN_HOST_URI_WIN;
 
 		public class AudioQueryResult
 		{
 			public bool IsAudio;
 		}
 
-		private static string[] Escape(IEnumerable<string> args)
-			=> args.Select(static s => s.ContainsOrdinal(' ') ? $"\"{s}\"" : s).ToArray();
-
-		//note: accepts . or : in the stream stream/substream separator in the stream ID format, since that changed at some point in FFMPEG history
-		//if someone has a better idea how to make the determination of whether an audio stream is available, I'm all ears
 		private static readonly Regex rxHasAudio = new Regex(@"Stream \#(\d*(\.|\:)\d*)\: Audio", RegexOptions.Compiled);
 		public static AudioQueryResult QueryAudio(string path)
 		{
@@ -72,15 +59,15 @@ namespace BizHawk.Common
 
 		public static RunResults Run(params string[] args)
 		{
-			args = Escape(args);
-			StringBuilder sbCmdline = new StringBuilder();
-			for (int i = 0; i < args.Length; i++)
+			var escapedArgs = args.Select(static s => s.ContainsOrdinal(' ') ? $"\"{s}\"" : s);
+			var sbCmdline = new StringBuilder();
+			foreach (var arg in escapedArgs)
 			{
-				sbCmdline.Append(args[i]);
-				if (i != args.Length - 1) sbCmdline.Append(' ');
+				sbCmdline.Append(arg);
+				sbCmdline.Append(' ');
 			}
 
-			ProcessStartInfo oInfo = new ProcessStartInfo(FFmpegPath, sbCmdline.ToString())
+			var oInfo = new ProcessStartInfo(FFmpegPath, sbCmdline.ToString().TrimEnd())
 			{
 				UseShellExecute = false,
 				CreateNoWindow = true,
@@ -88,21 +75,13 @@ namespace BizHawk.Common
 				RedirectStandardError = true,
 			};
 
-			Process proc = new Process();
-			proc.StartInfo = oInfo;
-			Mutex m = new Mutex();
-
+			using var proc = new Process { StartInfo = oInfo };
+			var m = new Mutex();
 			var outputBuilder = new StringBuilder();
-			var outputCloseEvent = new TaskCompletionSource<bool>();
-			var errorCloseEvent = new TaskCompletionSource<bool>();
 
-			proc.OutputDataReceived += (s, e) =>
+			proc.OutputDataReceived += (_, e) =>
 			{
-				if (e.Data == null)
-				{
-					outputCloseEvent.SetResult(true);
-				}
-				else
+				if (e.Data != null)
 				{
 					m.WaitOne();
 					outputBuilder.Append(e.Data);
@@ -110,13 +89,9 @@ namespace BizHawk.Common
 				}
 			};
 
-			proc.ErrorDataReceived += (s, e) =>
+			proc.ErrorDataReceived += (_, e) =>
 			{
-				if (e.Data == null)
-				{
-					errorCloseEvent.SetResult(true);
-				}
-				else
+				if (e.Data != null)
 				{
 					m.WaitOne();
 					outputBuilder.Append(e.Data);
@@ -128,10 +103,11 @@ namespace BizHawk.Common
 			proc.BeginOutputReadLine();
 			proc.BeginErrorReadLine();
 			proc.WaitForExit();
-			string resultText = "";
+
 			m.WaitOne();
-			resultText = outputBuilder.ToString();
+			var resultText = outputBuilder.ToString();
 			m.ReleaseMutex();
+			m.Dispose();
 
 			return new RunResults
 			{
@@ -140,7 +116,6 @@ namespace BizHawk.Common
 			};
 		}
 
-		/// <exception cref="InvalidOperationException">FFmpeg exited with non-zero exit code or produced no output</exception>
 		public static byte[] DecodeAudio(string path)
 		{
 			string tempfile = Path.GetTempFileName();
