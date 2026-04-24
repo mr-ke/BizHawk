@@ -225,7 +225,7 @@ namespace BizHawk.Client.EmuHawk
 			_audioCodecContext->codec_id = codec->id;
 			_audioCodecContext->codec_type = AVMediaType.AVMEDIA_TYPE_AUDIO;
 			_audioCodecContext->sample_rate = _sampleRate;
-			_audioCodecContext->sample_fmt = AVSampleFormat.AV_SAMPLE_FMT_FLTP;
+			_audioCodecContext->sample_fmt = GetSupportedSampleFormat(codec);
 			_audioCodecContext->time_base = new AVRational { num = 1, den = _sampleRate };
 
 			var chLayout = default(AVChannelLayout);
@@ -243,11 +243,11 @@ namespace BizHawk.Client.EmuHawk
 				throw new InvalidOperationException($"Failed to open audio codec: {GetErrorMessage(ret)}");
 			}
 
-			_audioStream->codecpar->codec_id = _audioCodecContext->codec_id;
-			_audioStream->codecpar->codec_type = _audioCodecContext->codec_type;
-			_audioStream->codecpar->sample_rate = _audioCodecContext->sample_rate;
-			_audioStream->codecpar->format = (int)_audioCodecContext->sample_fmt;
-			_audioStream->codecpar->ch_layout = _audioCodecContext->ch_layout;
+			ret = ffmpeg.avcodec_parameters_from_context(_audioStream->codecpar, _audioCodecContext);
+			if (ret < 0)
+			{
+				throw new InvalidOperationException($"Failed to copy audio codec parameters: {GetErrorMessage(ret)}");
+			}
 			_audioStream->time_base = _audioCodecContext->time_base;
 
 			_audioFrameSize = _audioCodecContext->frame_size;
@@ -546,6 +546,17 @@ namespace BizHawk.Client.EmuHawk
 			ffmpeg.av_strerror(errorCode, buffer, ffmpeg.AV_ERROR_MAX_STRING_SIZE);
 			return Marshal.PtrToStringAnsi((IntPtr)buffer) ?? $"Error code: {errorCode}";
 		}
+
+#pragma warning disable CS0618
+		private static AVSampleFormat GetSupportedSampleFormat(AVCodec* codec)
+		{
+			if (codec->sample_fmts != null)
+			{
+				return codec->sample_fmts[0];
+			}
+			return AVSampleFormat.AV_SAMPLE_FMT_S16;
+		}
+#pragma warning restore CS0618
 
 		public void Dispose()
 		{

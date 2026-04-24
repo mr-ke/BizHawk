@@ -62,23 +62,27 @@ namespace BizHawk.Client.EmuHawk
 
 		private static string GetVideoCodecName(FFmpegWriterForm.FormatPreset token)
 		{
-			return token?.Name?.ToLowerInvariant() switch
+			var nameLower = token?.Name?.ToLowerInvariant() ?? "";
+			return nameLower switch
 			{
 				"vp8" => "libvpx",
 				"vp9" => "libvpx-vp9",
 				"h264" => "libx264",
 				"h265" or "hevc" => "libx265",
 				"av1" => "libaom-av1",
+				_ when nameLower.Contains("hevc") || nameLower.Contains("h265") => "libx265",
 				_ => "libx264",
 			};
 		}
 
 		private static string GetAudioCodecName(FFmpegWriterForm.FormatPreset token)
 		{
-			return token?.Name?.ToLowerInvariant() switch
+			var nameLower = token?.Name?.ToLowerInvariant() ?? "";
+			return nameLower switch
 			{
 				"vp8" or "vp9" or "webm" => "libopus",
 				"av1" => "libopus",
+				_ when nameLower.Contains("matroska") => "libvorbis",
 				_ => "aac",
 			};
 		}
