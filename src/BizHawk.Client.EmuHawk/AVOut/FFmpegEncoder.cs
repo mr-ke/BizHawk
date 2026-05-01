@@ -28,6 +28,7 @@ namespace BizHawk.Client.EmuHawk
 		private int _channels;
 		private int _crf;
 		private string _preset;
+		private string _videoCodecName;
 		private long _videoPts;
 		private long _audioPts;
 
@@ -60,6 +61,7 @@ namespace BizHawk.Client.EmuHawk
 			_channels = channels;
 			_crf = crf;
 			_preset = preset;
+			_videoCodecName = videoCodecName;
 
 			int ret;
 			AVFormatContext* formatContext = null;
@@ -123,13 +125,17 @@ namespace BizHawk.Client.EmuHawk
 			_videoCodecContext->height = _height;
 			_videoCodecContext->time_base = new AVRational { num = _fpsDen, den = _fpsNum };
 			_videoCodecContext->framerate = new AVRational { num = _fpsNum, den = _fpsDen };
-			_videoCodecContext->pix_fmt = AVPixelFormat.AV_PIX_FMT_YUV420P;
+			_videoCodecContext->pix_fmt = GetPixelFormat(_videoCodecName);
 			_videoCodecContext->gop_size = 12;
-			_videoCodecContext->max_b_frames = 1;
-			_videoCodecContext->color_range = AVColorRange.AVCOL_RANGE_JPEG;
-			_videoCodecContext->colorspace = AVColorSpace.AVCOL_SPC_BT709;
-			_videoCodecContext->color_primaries = AVColorPrimaries.AVCOL_PRI_BT709;
-			_videoCodecContext->color_trc = AVColorTransferCharacteristic.AVCOL_TRC_BT709;
+
+			if (!IsRgbPixelFormat(_videoCodecContext->pix_fmt))
+			{
+				_videoCodecContext->max_b_frames = 1;
+				_videoCodecContext->color_range = AVColorRange.AVCOL_RANGE_JPEG;
+				_videoCodecContext->colorspace = AVColorSpace.AVCOL_SPC_BT709;
+				_videoCodecContext->color_primaries = AVColorPrimaries.AVCOL_PRI_BT709;
+				_videoCodecContext->color_trc = AVColorTransferCharacteristic.AVCOL_TRC_BT709;
+			}
 
 			if ((_formatContext->oformat->flags & ffmpeg.AVFMT_GLOBALHEADER) != 0)
 			{
@@ -140,8 +146,32 @@ namespace BizHawk.Client.EmuHawk
 			int ret;
 			try
 			{
-				ffmpeg.av_dict_set(&opts, "crf", _crf.ToString(), 0);
-				ffmpeg.av_dict_set(&opts, "preset", _preset, 0);
+				if (codec->id == AVCodecID.AV_CODEC_ID_VP8 || codec->id == AVCodecID.AV_CODEC_ID_VP9)
+				{
+					ffmpeg.av_dict_set(&opts, "deadline", "realtime", 0);
+					ffmpeg.av_dict_set(&opts, "cpu-used", "4", 0);
+					var vpCrf = Math.Min(_crf, 15);
+					ffmpeg.av_dict_set(&opts, "crf", vpCrf.ToString(), 0);
+				}
+				else if (_videoCodecName == "libx264rgb")
+				{
+					ffmpeg.av_dict_set(&opts, "qp", "0", 0);
+					ffmpeg.av_dict_set(&opts, "preset", "ultrafast", 0);
+				}
+				else if (_videoCodecName == "libxvid")
+				{
+					_videoCodecContext->bit_rate = 4000000;
+				}
+				else
+				{
+					ffmpeg.av_dict_set(&opts, "crf", _crf.ToString(), 0);
+					ffmpeg.av_dict_set(&opts, "preset", _preset, 0);
+				}
+
+				if (codec->id == AVCodecID.AV_CODEC_ID_HEVC)
+				{
+					ffmpeg.av_dict_set(&opts, "x265-params", $"crf={_crf}", 0);
+				}
 
 				ret = ffmpeg.avcodec_open2(_videoCodecContext, codec, &opts);
 				if (ret < 0)
@@ -224,9 +254,14 @@ namespace BizHawk.Client.EmuHawk
 
 			_audioCodecContext->codec_id = codec->id;
 			_audioCodecContext->codec_type = AVMediaType.AVMEDIA_TYPE_AUDIO;
-			_audioCodecContext->sample_rate = _sampleRate;
+			_audioCodecContext->sample_rate = GetSupportedSampleRate(codec, _sampleRate);
 			_audioCodecContext->sample_fmt = GetSupportedSampleFormat(codec);
-			_audioCodecContext->time_base = new AVRational { num = 1, den = _sampleRate };
+			_audioCodecContext->time_base = new AVRational { num = 1, den = _audioCodecContext->sample_rate };
+
+			if (codec->id == AVCodecID.AV_CODEC_ID_OPUS)
+			{
+				_audioCodecContext->bit_rate = 128000;
+			}
 
 			var chLayout = default(AVChannelLayout);
 			ffmpeg.av_channel_layout_default(&chLayout, _channels);
@@ -547,6 +582,25 @@ namespace BizHawk.Client.EmuHawk
 			return Marshal.PtrToStringAnsi((IntPtr)buffer) ?? $"Error code: {errorCode}";
 		}
 
+		private static AVPixelFormat GetPixelFormat(string codecName)
+		{
+			return codecName?.ToLowerInvariant() switch
+			{
+				"libx264rgb" => AVPixelFormat.AV_PIX_FMT_RGB24,
+				"utvideo" => AVPixelFormat.AV_PIX_FMT_GBRP,
+				"ffv1" => AVPixelFormat.AV_PIX_FMT_BGR0,
+				"rawvideo" => AVPixelFormat.AV_PIX_FMT_BGR0,
+				_ => AVPixelFormat.AV_PIX_FMT_YUV420P,
+			};
+		}
+
+		private static bool IsRgbPixelFormat(AVPixelFormat pixFmt)
+		{
+			return pixFmt == AVPixelFormat.AV_PIX_FMT_RGB24 ||
+				   pixFmt == AVPixelFormat.AV_PIX_FMT_BGR0 ||
+				   pixFmt == AVPixelFormat.AV_PIX_FMT_GBRP;
+		}
+
 #pragma warning disable CS0618
 		private static AVSampleFormat GetSupportedSampleFormat(AVCodec* codec)
 		{
@@ -555,6 +609,22 @@ namespace BizHawk.Client.EmuHawk
 				return codec->sample_fmts[0];
 			}
 			return AVSampleFormat.AV_SAMPLE_FMT_S16;
+		}
+
+		private static int GetSupportedSampleRate(AVCodec* codec, int requestedRate)
+		{
+			if (codec->supported_samplerates != null)
+			{
+				for (int i = 0; codec->supported_samplerates[i] != 0; i++)
+				{
+					if (codec->supported_samplerates[i] == requestedRate)
+					{
+						return requestedRate;
+					}
+				}
+				return codec->supported_samplerates[0];
+			}
+			return requestedRate;
 		}
 #pragma warning restore CS0618
 

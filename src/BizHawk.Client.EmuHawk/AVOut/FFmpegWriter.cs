@@ -65,11 +65,17 @@ namespace BizHawk.Client.EmuHawk
 			var nameLower = token?.Name?.ToLowerInvariant() ?? "";
 			return nameLower switch
 			{
-				"vp8" => "libvpx",
+				"vp8" or "webm" => "libvpx",
 				"vp9" => "libvpx-vp9",
+				"ogg" => "libtheora",
+				"xvid" => "libxvid",
 				"h264" => "libx264",
 				"h265" or "hevc" => "libx265",
 				"av1" => "libaom-av1",
+				_ when nameLower.Contains("ffv1") => "ffv1",
+				_ when nameLower.Contains("ut video") => "utvideo",
+				_ when nameLower.Contains("lossless avc") || nameLower.Contains("matroska lossless") => "libx264rgb",
+				_ when nameLower.Contains("uncompressed") => "rawvideo",
 				_ when nameLower.Contains("hevc") || nameLower.Contains("h265") => "libx265",
 				_ => "libx264",
 			};
@@ -82,7 +88,10 @@ namespace BizHawk.Client.EmuHawk
 			{
 				"vp8" or "vp9" or "webm" => "libopus",
 				"av1" => "libopus",
-				_ when nameLower.Contains("matroska") => "libvorbis",
+				"ogg" => "libvorbis",
+				"xvid" => "libmp3lame",
+				_ when nameLower.Contains("lossless") || nameLower.Contains("uncompressed") => "pcm_s16le",
+				_ when nameLower.Contains("matroska") && !nameLower.Contains("lossless") => "libvorbis",
 				_ => "aac",
 			};
 		}
