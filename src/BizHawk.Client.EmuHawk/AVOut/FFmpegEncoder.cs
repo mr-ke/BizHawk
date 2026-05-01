@@ -262,6 +262,18 @@ namespace BizHawk.Client.EmuHawk
 			{
 				_audioCodecContext->bit_rate = 128000;
 			}
+			else if (codec->id == AVCodecID.AV_CODEC_ID_AAC)
+			{
+				_audioCodecContext->bit_rate = 192000;
+			}
+			else if (codec->id == AVCodecID.AV_CODEC_ID_VORBIS)
+			{
+				_audioCodecContext->bit_rate = 160000;
+			}
+			else if (codec->id == AVCodecID.AV_CODEC_ID_MP3)
+			{
+				_audioCodecContext->bit_rate = 192000;
+			}
 
 			var chLayout = default(AVChannelLayout);
 			ffmpeg.av_channel_layout_default(&chLayout, _channels);
