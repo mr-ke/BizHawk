@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.IO;
+using System.Threading;
 
 using BizHawk.Client.Common;
 using BizHawk.Common.PathExtensions;
@@ -18,10 +20,62 @@ namespace BizHawk.Client.EmuHawk
 		private FFmpegWriterForm.FormatPreset _token;
 		private string _ext;
 
+		private BlockingCollection<object> _threadQ;
+		private Thread _workerT;
+
+		private class VideoCopy : IVideoProvider
+		{
+			private readonly int[] _vb;
+			public int VirtualWidth { get; }
+			public int VirtualHeight { get; }
+			public int BufferWidth { get; }
+			public int BufferHeight { get; }
+			public int BackgroundColor { get; }
+			public int VsyncNumerator { get; }
+			public int VsyncDenominator { get; }
+
+			public VideoCopy(IVideoProvider c)
+			{
+				_vb = c.GetVideoBufferCopy();
+				BufferWidth = c.BufferWidth;
+				BufferHeight = c.BufferHeight;
+				BackgroundColor = c.BackgroundColor;
+				VirtualWidth = c.VirtualWidth;
+				VirtualHeight = c.VirtualHeight;
+				VsyncNumerator = c.VsyncNumerator;
+				VsyncDenominator = c.VsyncDenominator;
+			}
+
+			public int[] GetVideoBuffer() => _vb;
+		}
+
 		public FFmpegWriter(IDialogParent dialogParent) => _dialogParent = dialogParent;
 
 		public void SetFrame(int frame)
 		{
+		}
+
+		private void ThreadProc()
+		{
+			try
+			{
+				while (true)
+				{
+					var o = _threadQ.Take();
+					switch (o)
+					{
+						case IVideoProvider provider:
+							AddFrameEx(provider);
+							break;
+						case short[] samples:
+							AddSamplesEx(samples);
+							break;
+						default:
+							return;
+					}
+				}
+			}
+			catch { }
 		}
 
 		public void OpenFile(string baseName)
@@ -31,6 +85,9 @@ namespace BizHawk.Client.EmuHawk
 			_ext = ext;
 			_segment = 0;
 			OpenFileSegment();
+			_threadQ = new BlockingCollection<object>(30);
+			_workerT = new Thread(ThreadProc) { IsBackground = true };
+			_workerT.Start();
 		}
 
 		private void OpenFileSegment()
@@ -108,11 +165,24 @@ namespace BizHawk.Client.EmuHawk
 
 		public void CloseFile()
 		{
+			_threadQ?.Add(new object());
+			_workerT?.Join();
 			CloseFileSegment();
 			_baseName = null;
 		}
 
 		public void AddFrame(IVideoProvider source)
+		{
+			while (!_threadQ.TryAdd(new VideoCopy(source), 1000))
+			{
+				if (_workerT == null || !_workerT.IsAlive)
+				{
+					throw new Exception("FFmpeg worker thread died!");
+				}
+			}
+		}
+
+		private void AddFrameEx(IVideoProvider source)
 		{
 			if (source.BufferWidth != _width || source.BufferHeight != _height)
 			{
@@ -186,6 +256,11 @@ namespace BizHawk.Client.EmuHawk
 				return;
 			}
 
+			_threadQ.Add(samples);
+		}
+
+		private void AddSamplesEx(short[] samples)
+		{
 			_encoder.EncodeAudioFrame(samples);
 		}
 
