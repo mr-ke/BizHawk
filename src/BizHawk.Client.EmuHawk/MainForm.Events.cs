@@ -1321,11 +1321,20 @@ namespace BizHawk.Client.EmuHawk
 
 		private void DisplayConfigMenuItem_Click(object sender, EventArgs e)
 		{
-			using DisplayConfig window = new(Config, DialogController, GL);
+			Func<string, bool> loadBgfxShader = IsBgfxMode ? BgfxDisplayManager.LoadChainPreset : null;
+			using DisplayConfig window = new(Config, DialogController, GL, loadBgfxShader);
 			if (this.ShowDialogWithTempMute(window).IsOk())
 			{
-				DisplayManager.UpdateGlobals(Config, Emulator);
-				DisplayManager.RefreshUserShader();
+				if (IsBgfxMode)
+				{
+					BgfxDisplayManager.UpdateGlobals(Config, Emulator);
+					BgfxDisplayManager.RefreshUserShader();
+				}
+				else
+				{
+					DisplayManager.UpdateGlobals(Config, Emulator);
+					DisplayManager.RefreshUserShader();
+				}
 				FrameBufferResized();
 				SynchChrome();
 				if (window.NeedReset)

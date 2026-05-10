@@ -140,6 +140,7 @@ namespace BizHawk.Client.Common
 		public int TargetDisplayFilter { get; set; }
 		public int DispFinalFilter { get; set; } = 0; // None
 		public string DispUserFilterPath { get; set; } = "";
+		public string DispBgfxShaderPath { get; set; } = "";
 		public RecentFiles RecentRoms { get; set; } = new RecentFiles(10);
 		public bool PauseWhenMenuActivated { get; set; } = true;
 		public bool SaveWindowPosition { get; set; } = true;

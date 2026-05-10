@@ -7,14 +7,18 @@ namespace BizHawk.Bizware.Graphics
 	public static class IGLExtensions
 	{
 		public static IGuiRenderer CreateGuiRenderer(this IGL gl)
-			=> gl is IGL_GDIPlus gdipImpl
-				? new GDIPlusGuiRenderer(gdipImpl)
-				: new GuiRenderer(gl);
+			=> gl is IGL_Bgfx bgfxImpl
+				? new GDIPlusGuiRenderer(bgfxImpl.GdiPlus)
+				: gl is IGL_GDIPlus gdipImpl
+					? new GDIPlusGuiRenderer(gdipImpl)
+					: new GuiRenderer(gl);
 
 		public static I2DRenderer Create2DRenderer(this IGL gl, ImGuiResourceCache resourceCache)
-			=> gl is IGL_GDIPlus gdipImpl
-				? new SDLImGui2DRenderer(gdipImpl, resourceCache)
-				: new ImGui2DRenderer(gl, resourceCache);
+			=> gl is IGL_Bgfx bgfxImpl
+				? new SDLImGui2DRenderer(bgfxImpl.GdiPlus, resourceCache)
+				: gl is IGL_GDIPlus gdipImpl
+					? new SDLImGui2DRenderer(gdipImpl, resourceCache)
+					: new ImGui2DRenderer(gl, resourceCache);
 
 		/// <summary>
 		/// Loads a texture from disk

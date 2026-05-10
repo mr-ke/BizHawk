@@ -5,5 +5,6 @@ namespace BizHawk.Bizware.Graphics
 		OpenGL = 0,
 		GdiPlus = 1,
 		D3D11 = 2,
+		Bgfx = 3,
 	}
 }

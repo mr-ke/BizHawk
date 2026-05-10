@@ -18,11 +18,19 @@ namespace BizHawk.Client.EmuHawk
 			appendAllFilesEntry: false,
 			new FilesystemFilter(".CGP Files", extensions: [ "cgp", "glslp" ]));
 
+		private static readonly FilesystemFilterSet BgfxShaderPresetsFSFilterSet = new(
+			appendAllFilesEntry: false,
+			new FilesystemFilter("BGFX Shader Presets", extensions: [ "json" ]));
+
 		private readonly Config _config;
 
 		private readonly IGL _gl;
 
 		private string _pathSelection;
+
+		private string _bgfxShaderPath;
+
+		private readonly Func<string, bool> _loadBgfxShaderCallback;
 
 		private readonly RadioButtonGroupTracker _snowRadioTracker;
 
@@ -50,10 +58,11 @@ namespace BizHawk.Client.EmuHawk
 
 		public bool NeedReset { get; set; }
 
-		public DisplayConfig(Config config, IDialogController dialogController, IGL gl)
+		public DisplayConfig(Config config, IDialogController dialogController, IGL gl, Func<string, bool> loadBgfxShaderCallback = null)
 		{
 			_config = config;
 			_gl = gl;
+			_loadBgfxShaderCallback = loadBgfxShaderCallback;
 			DialogController = dialogController;
 			var snowSettings = _config.GetCoreSettings<NullEmulator, SnowyNullVideo.Settings>() ?? new();
 
@@ -130,6 +139,7 @@ namespace BizHawk.Client.EmuHawk
 			rbUser.Checked = _config.TargetDisplayFilter == 3;
 
 			_pathSelection = _config.DispUserFilterPath ?? "";
+			_bgfxShaderPath = _config.DispBgfxShaderPath ?? "";
 			RefreshState();
 
 			rbFinalFilterNone.Checked = _config.DispFinalFilter == 0;
@@ -154,6 +164,9 @@ namespace BizHawk.Client.EmuHawk
 			rbOpenGL.Checked = _config.DispMethod == EDispMethod.OpenGL;
 			rbGDIPlus.Checked = _config.DispMethod == EDispMethod.GdiPlus;
 			rbD3D11.Checked = _config.DispMethod == EDispMethod.D3D11;
+			rbBgfx.Checked = _config.DispMethod == EDispMethod.Bgfx;
+
+			UpdateFilterVisibilityForDispMethod();
 
 			cbStatusBarWindowed.Checked = _config.DispChromeStatusBarWindowed;
 			cbCaptionWindowed.Checked = _config.DispChromeCaptionWindowed;
@@ -334,6 +347,8 @@ namespace BizHawk.Client.EmuHawk
 				_config.DispMethod = EDispMethod.GdiPlus;
 			if(rbD3D11.Checked)
 				_config.DispMethod = EDispMethod.D3D11;
+			if(rbBgfx.Checked)
+				_config.DispMethod = EDispMethod.Bgfx;
 
 			if (int.TryParse(txtCropLeft.Text, out int dispCropLeft))
 			{
@@ -361,6 +376,7 @@ namespace BizHawk.Client.EmuHawk
 			}
 
 			_config.DispUserFilterPath = _pathSelection;
+			_config.DispBgfxShaderPath = _bgfxShaderPath;
 
 			DialogResult = DialogResult.OK;
 			Close();
@@ -368,10 +384,55 @@ namespace BizHawk.Client.EmuHawk
 
 		private void RefreshState()
 		{
-			lblUserFilterName.Text = Path.GetFileNameWithoutExtension(_pathSelection);
+			if (rbBgfx.Checked)
+			{
+				lblUserFilterName.Text = Path.GetFileNameWithoutExtension(_bgfxShaderPath);
+			}
+			else
+			{
+				lblUserFilterName.Text = Path.GetFileNameWithoutExtension(_pathSelection);
+			}
 		}
 
 		private void BtnSelectUserFilter_Click(object sender, EventArgs e)
+		{
+			if (rbBgfx.Checked)
+			{
+				SelectBgfxShader();
+			}
+			else
+			{
+				SelectCgpShader();
+			}
+		}
+
+		private void SelectBgfxShader()
+		{
+			var result = this.ShowFileOpenDialog(
+				filter: BgfxShaderPresetsFSFilterSet,
+				initDir: string.IsNullOrWhiteSpace(_bgfxShaderPath)
+					? _config.PathEntries.GlobalBaseAbsolutePath()
+					: Path.GetDirectoryName(_bgfxShaderPath)!,
+				initFileName: _bgfxShaderPath);
+			if (result is null) return;
+
+			var choice = Path.GetFullPath(result);
+
+			if (!File.Exists(choice))
+			{
+				using var errorForm = new ExceptionBox($"Shader file not found: {choice}");
+				this.ShowDialogAsChild(errorForm);
+				return;
+			}
+
+			_bgfxShaderPath = choice;
+			_config.DispBgfxShaderPath = choice;
+			RefreshState();
+
+			_loadBgfxShaderCallback?.Invoke(choice);
+		}
+
+		private void SelectCgpShader()
 		{
 			var result = this.ShowFileOpenDialog(
 				filter: CgShaderPresetsFSFilterSet,
@@ -384,12 +445,10 @@ namespace BizHawk.Client.EmuHawk
 			rbUser.Checked = true;
 			var choice = Path.GetFullPath(result);
 
-			//test the preset
 			using (var stream = File.OpenRead(choice))
 			{
 				var cgp = new RetroShaderPreset(stream);
 
-				// try compiling it
 				bool ok = false;
 				string errors = "";
 				try
@@ -486,6 +545,25 @@ namespace BizHawk.Client.EmuHawk
 			txtCropTop.Text = "0";
 			txtCropRight.Text = "0";
 			txtCropBottom.Text = "0";
+		}
+
+		private void RbDispMethod_CheckedChanged(object sender, EventArgs e)
+		{
+			UpdateFilterVisibilityForDispMethod();
+		}
+
+		private void UpdateFilterVisibilityForDispMethod()
+		{
+			bool isBgfx = rbBgfx.Checked;
+			rbHq2x.Visible = !isBgfx;
+			rbScanlines.Visible = !isBgfx;
+			lblScanlines.Visible = !isBgfx;
+			tbScanlineIntensity.Visible = !isBgfx;
+
+			if (isBgfx && (rbHq2x.Checked || rbScanlines.Checked))
+			{
+				rbNone.Checked = true;
+			}
 		}
 	}
 }

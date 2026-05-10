@@ -1,4 +1,4 @@
-﻿namespace BizHawk.Client.EmuHawk
+namespace BizHawk.Client.EmuHawk
 {
 	partial class DisplayConfig
 	{
@@ -86,6 +86,8 @@
 			this.rbD3D11 = new System.Windows.Forms.RadioButton();
 			this.label7 = new BizHawk.WinForms.Controls.LocLabelEx();
 			this.rbGDIPlus = new System.Windows.Forms.RadioButton();
+			this.rbBgfx = new System.Windows.Forms.RadioButton();
+			this.lblBgfxDesc = new BizHawk.WinForms.Controls.LocLabelEx();
 			this.tpMisc = new System.Windows.Forms.TabPage();
 			this.flpStaticWindowTitles = new BizHawk.WinForms.Controls.LocSzSingleColumnFLP();
 			this.cbStaticWindowTitles = new BizHawk.WinForms.Controls.CheckBoxEx();
@@ -443,6 +445,7 @@
 			this.rbOpenGL.TabStop = true;
 			this.rbOpenGL.Text = "OpenGL";
 			this.rbOpenGL.UseVisualStyleBackColor = true;
+			this.rbOpenGL.CheckedChanged += new System.EventHandler(this.RbDispMethod_CheckedChanged);
 			// 
 			// label5
 			// 
@@ -641,6 +644,8 @@
 			this.groupBox3.Controls.Add(this.rbD3D11);
 			this.groupBox3.Controls.Add(this.label7);
 			this.groupBox3.Controls.Add(this.rbGDIPlus);
+			this.groupBox3.Controls.Add(this.rbBgfx);
+			this.groupBox3.Controls.Add(this.lblBgfxDesc);
 			this.groupBox3.Controls.Add(this.label5);
 			this.groupBox3.Controls.Add(this.rbOpenGL);
 			this.groupBox3.Location = new System.Drawing.Point(6, 5);
@@ -686,25 +691,43 @@
 			this.rbD3D11.TabStop = true;
 			this.rbD3D11.Text = "Direct3D11";
 			this.rbD3D11.UseVisualStyleBackColor = true;
+			this.rbD3D11.CheckedChanged += new System.EventHandler(this.RbDispMethod_CheckedChanged);
 			// 
 			// label7
 			// 
-			this.label7.Location = new System.Drawing.Point(21, 191);
+			this.label7.Location = new System.Drawing.Point(21, 186);
 			this.label7.Name = "label7";
-			this.label7.Text = " • Slow; Mainly for compatibility purposes\r\n • Missing many features\r\n • Works be" +
-    "tter over Remote Desktop, etc.\r\n";
+			this.label7.Text = "• Windows Only (Slow)\r\n";
 			// 
 			// rbGDIPlus
 			// 
 			this.rbGDIPlus.AutoSize = true;
 			this.rbGDIPlus.Checked = true;
-			this.rbGDIPlus.Location = new System.Drawing.Point(6, 171);
+			this.rbGDIPlus.Location = new System.Drawing.Point(6, 166);
 			this.rbGDIPlus.Name = "rbGDIPlus";
 			this.rbGDIPlus.Size = new System.Drawing.Size(50, 17);
 			this.rbGDIPlus.TabIndex = 17;
 			this.rbGDIPlus.TabStop = true;
 			this.rbGDIPlus.Text = "GDI+";
 			this.rbGDIPlus.UseVisualStyleBackColor = true;
+			this.rbGDIPlus.CheckedChanged += new System.EventHandler(this.RbDispMethod_CheckedChanged);
+			// 
+			// lblBgfxDesc
+			// 
+			this.lblBgfxDesc.Location = new System.Drawing.Point(21, 225);
+			this.lblBgfxDesc.Name = "lblBgfxDesc";
+			this.lblBgfxDesc.Text = "• Modern cross-platform";
+			// 
+			// rbBgfx
+			// 
+			this.rbBgfx.AutoSize = true;
+			this.rbBgfx.Location = new System.Drawing.Point(6, 205);
+			this.rbBgfx.Name = "rbBgfx";
+			this.rbBgfx.Size = new System.Drawing.Size(50, 17);
+			this.rbBgfx.TabIndex = 20;
+			this.rbBgfx.Text = "Bgfx";
+			this.rbBgfx.UseVisualStyleBackColor = true;
+			this.rbBgfx.CheckedChanged += new System.EventHandler(this.RbDispMethod_CheckedChanged);
 			// 
 			// tpMisc
 			// 
@@ -1075,6 +1098,8 @@
 		private System.Windows.Forms.GroupBox groupBox3;
 		private BizHawk.WinForms.Controls.LocLabelEx label7;
 		private System.Windows.Forms.RadioButton rbGDIPlus;
+		private System.Windows.Forms.RadioButton rbBgfx;
+		private BizHawk.WinForms.Controls.LocLabelEx lblBgfxDesc;
 		private System.Windows.Forms.TabPage tpMisc;
 		private BizHawk.WinForms.Controls.LocLabelEx label8;
 		private System.Windows.Forms.RadioButton rbD3D11;

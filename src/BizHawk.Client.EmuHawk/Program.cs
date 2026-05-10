@@ -299,6 +299,8 @@ namespace BizHawk.Client.EmuHawk
 
 						// don't return the same IGL, we don't want the test context to be part of this IGL
 						return new IGL_OpenGL();
+					case EDispMethod.Bgfx:
+						return new IGL_Bgfx();
 					default:
 					case EDispMethod.GdiPlus:
 						// if this fails, we're screwed

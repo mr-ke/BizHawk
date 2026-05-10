@@ -549,7 +549,15 @@ namespace BizHawk.Client.EmuHawk
 				MainForm_MouseMove,
 				MainForm_MouseWheel);
 
-			DisplayManager = new(Config, Emulator, InputManager, MovieSession, GL, _presentationPanel, () => DisableSecondaryThrottling);
+			if (Config.DispMethod == EDispMethod.Bgfx)
+			{
+				BgfxDisplayManager = new(Config, Emulator, InputManager, MovieSession, _presentationPanel);
+				BgfxDisplayManager.InitializeBgfx();
+			}
+			else
+			{
+				DisplayManager = new(Config, Emulator, InputManager, MovieSession, GL, _presentationPanel, () => DisableSecondaryThrottling);
+			}
 			Controls.InsertBefore(MainformMenu, insert: _presentationPanel.Control); // must be first for ??? WinForms reasons
 
 			// set up networking before ApiManager (in ToolManager)
@@ -988,9 +996,13 @@ namespace BizHawk.Client.EmuHawk
 				// translate mouse coordinates
 				// NOTE: these must go together, because in the case of screen rotation, X and Y are transformed together
 				{
-					var p = DisplayManager.UntransformPoint(new Point(
-						finalHostController.AxisValue("WMouse X"),
-						finalHostController.AxisValue("WMouse Y")));
+					var p = IsBgfxMode
+						? BgfxDisplayManager.UntransformPoint(new Point(
+							finalHostController.AxisValue("WMouse X"),
+							finalHostController.AxisValue("WMouse Y")))
+						: DisplayManager.UntransformPoint(new Point(
+							finalHostController.AxisValue("WMouse X"),
+							finalHostController.AxisValue("WMouse Y")));
 					var x = p.X / (float)_currentVideoProvider.BufferWidth;
 					var y = p.Y / (float)_currentVideoProvider.BufferHeight;
 					finalHostController.AcceptNewAxis("WMouse X", (int)((x * 20000) - 10000));
@@ -1047,6 +1059,8 @@ namespace BizHawk.Client.EmuHawk
 			// NOTE: this gets called twice sometimes. once by using() in Program.cs and once from winforms internals when the form is closed...
 			DisplayManager?.Dispose();
 			DisplayManager = null;
+			BgfxDisplayManager?.Dispose();
+			BgfxDisplayManager = null;
 
 			RA?.Dispose();
 			RA = null;
@@ -1226,8 +1240,11 @@ namespace BizHawk.Client.EmuHawk
 		private IControlMainform ToolBypassingMovieEndAction => Tools.FirstOrNull<IControlMainform>(tool => tool.WantsToBypassMovieEndAction);
 
 		private DisplayManager DisplayManager;
+		private BgfxDisplayManager BgfxDisplayManager;
 
-		private OSDManager OSD => DisplayManager.OSD;
+		private bool IsBgfxMode => BgfxDisplayManager != null;
+
+		private OSDManager OSD => DisplayManager?.OSD ?? BgfxDisplayManager?.OSD;
 
 		public IMovieSession MovieSession { get; }
 
@@ -1357,7 +1374,9 @@ namespace BizHawk.Client.EmuHawk
 
 		private void TakeScreenshotClientToClipboard()
 		{
-			using var bb = DisplayManager.RenderOffscreen(_currentVideoProvider, Config.ScreenshotCaptureOsd);
+			using var bb = IsBgfxMode
+				? BgfxDisplayManager.RenderOffscreen(_currentVideoProvider, Config.ScreenshotCaptureOsd)
+				: DisplayManager.RenderOffscreen(_currentVideoProvider, Config.ScreenshotCaptureOsd);
 			bb.ToSysdrawingBitmap().ToClipBoard();
 			AddOnScreenMessage("Screenshot (client) saved to clipboard.");
 		}
@@ -1436,7 +1455,9 @@ namespace BizHawk.Client.EmuHawk
 				Size lastComputedSize = new Size(1, 1);
 				for (; zoom >= 1; zoom--)
 				{
-					lastComputedSize = DisplayManager.CalculateClientSize(_currentVideoProvider, zoom);
+					lastComputedSize = IsBgfxMode
+						? BgfxDisplayManager.CalculateClientSize(_currentVideoProvider, zoom)
+						: DisplayManager.CalculateClientSize(_currentVideoProvider, zoom);
 					if (lastComputedSize.Width + borderWidth < area.Width
 						&& lastComputedSize.Height + borderHeight < area.Height)
 					{
@@ -2266,7 +2287,10 @@ namespace BizHawk.Client.EmuHawk
 		{
 			if (Config.DispSpeedupFeatures == 0)
 			{
-				DisplayManager.DiscardApiHawkSurfaces();
+				if (IsBgfxMode)
+					BgfxDisplayManager.DiscardApiHawkSurfaces();
+				else
+					DisplayManager.DiscardApiHawkSurfaces();
 				return;
 			}
 
@@ -2296,16 +2320,27 @@ namespace BizHawk.Client.EmuHawk
 			//can we fix it later not to?
 			if (isZero)
 			{
-				DisplayManager.Blank();
+				if (IsBgfxMode)
+					BgfxDisplayManager.Blank();
+				else
+					DisplayManager.Blank();
 			}
 			else
 			{
-				DisplayManager.UpdateSource(video, useSnow: Emulator is NullEmulator && (Config.SnowyNullHawk switch
-				{
-					SnowyNullVideo.TriggerCriterion.Always => true,
-					SnowyNullVideo.TriggerCriterion.WeekOfChristmas => DateTime.Now.DayOfYear is >= 354/*Dec. 20*/ and <= 360/*Dec. 26*/,
-					_ => false,
-				}));
+				if (IsBgfxMode)
+					BgfxDisplayManager.UpdateSource(video, useSnow: Emulator is NullEmulator && (Config.SnowyNullHawk switch
+					{
+						SnowyNullVideo.TriggerCriterion.Always => true,
+						SnowyNullVideo.TriggerCriterion.WeekOfChristmas => DateTime.Now.DayOfYear is >= 354/*Dec. 20*/ and <= 360/*Dec. 26*/,
+						_ => false,
+					}));
+				else
+					DisplayManager.UpdateSource(video, useSnow: Emulator is NullEmulator && (Config.SnowyNullHawk switch
+					{
+						SnowyNullVideo.TriggerCriterion.Always => true,
+						SnowyNullVideo.TriggerCriterion.WeekOfChristmas => DateTime.Now.DayOfYear is >= 354/*Dec. 20*/ and <= 360/*Dec. 26*/,
+						_ => false,
+					}));
 			}
 		}
 
@@ -2547,13 +2582,17 @@ namespace BizHawk.Client.EmuHawk
 
 		public BitmapBuffer CaptureOSD()
 		{
-			var bb = DisplayManager.RenderOffscreen(_currentVideoProvider, true);
+			var bb = IsBgfxMode
+				? BgfxDisplayManager.RenderOffscreen(_currentVideoProvider, true)
+				: DisplayManager.RenderOffscreen(_currentVideoProvider, true);
 			bb.DiscardAlpha();
 			return bb;
 		}
 		public BitmapBuffer CaptureLua()
 		{
-			var bb = DisplayManager.RenderOffscreenLua(_currentVideoProvider);
+			var bb = IsBgfxMode
+				? BgfxDisplayManager.RenderOffscreenLua(_currentVideoProvider)
+				: DisplayManager.RenderOffscreenLua(_currentVideoProvider);
 			bb.DiscardAlpha();
 			return bb;
 		}
@@ -2826,7 +2865,10 @@ namespace BizHawk.Client.EmuHawk
 			Tools.Restart(Config, Emulator, Game);
 			ExtToolManager.Restart(Config);
 			Sound.Config = Config;
-			DisplayManager.UpdateGlobals(Config, Emulator);
+			if (IsBgfxMode)
+				BgfxDisplayManager.UpdateGlobals(Config, Emulator);
+			else
+				DisplayManager.UpdateGlobals(Config, Emulator);
 			RA?.Restart();
 			AddOnScreenMessage($"Config file loaded: {iniPath}");
 		}
@@ -2846,7 +2888,10 @@ namespace BizHawk.Client.EmuHawk
 			StepRunLoop_Core(true);
 			if (discardApiHawkSurfaces)
 			{
-				DisplayManager.DiscardApiHawkSurfaces();
+				if (IsBgfxMode)
+					BgfxDisplayManager.DiscardApiHawkSurfaces();
+				else
+					DisplayManager.DiscardApiHawkSurfaces();
 			}
 		}
 
@@ -3678,7 +3723,8 @@ namespace BizHawk.Client.EmuHawk
 					}
 				}
 
-				DisplayManager.ActivateOpenGLContext(); // required in case the core wants to create a shared OpenGL context
+				if (!IsBgfxMode)
+					DisplayManager.ActivateOpenGLContext(); // required in case the core wants to create a shared OpenGL context
 
 				var result = loader.LoadRom(
 					path: path,
@@ -3822,8 +3868,16 @@ namespace BizHawk.Client.EmuHawk
 					}
 
 					OnRomChanged();
-					DisplayManager.UpdateGlobals(Config, Emulator);
-					DisplayManager.Blank();
+					if (IsBgfxMode)
+					{
+						BgfxDisplayManager.UpdateGlobals(Config, Emulator);
+						BgfxDisplayManager.Blank();
+					}
+					else
+					{
+						DisplayManager.UpdateGlobals(Config, Emulator);
+						DisplayManager.Blank();
+					}
 					CreateRewinder();
 
 					RewireSound();
@@ -3857,8 +3911,16 @@ namespace BizHawk.Client.EmuHawk
 				{
 					// This shows up if there's a problem
 					Tools.Restart(Config, Emulator, Game);
-					DisplayManager.UpdateGlobals(Config, Emulator);
-					DisplayManager.Blank();
+					if (IsBgfxMode)
+					{
+						BgfxDisplayManager.UpdateGlobals(Config, Emulator);
+						BgfxDisplayManager.Blank();
+					}
+					else
+					{
+						DisplayManager.UpdateGlobals(Config, Emulator);
+						DisplayManager.Blank();
+					}
 					ExtToolManager.BuildToolStrip();
 					CheatList.NewList("");
 					OnRomChanged();
@@ -4011,7 +4073,10 @@ namespace BizHawk.Client.EmuHawk
 			{
 				CloseGame(clearSram);
 				Tools.Restart(Config, Emulator, Game);
-				DisplayManager.UpdateGlobals(Config, Emulator);
+				if (IsBgfxMode)
+					BgfxDisplayManager.UpdateGlobals(Config, Emulator);
+				else
+					DisplayManager.UpdateGlobals(Config, Emulator);
 				ExtToolManager.BuildToolStrip();
 				PauseOnFrame = null;
 				CurrentlyOpenRom = null;
