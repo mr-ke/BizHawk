@@ -527,8 +527,10 @@ namespace BizHawk.Client.Common.Bgfx
                 }
                 else
                 {
-                    width = target.Width > 0 ? target.Width : (ushort)textureWidth;
-                    height = target.Height > 0 ? target.Height : (ushort)textureHeight;
+                    ushort defaultWidth = textureWidth > 0 ? (ushort)textureWidth : (ushort)256;
+                    ushort defaultHeight = textureHeight > 0 ? (ushort)textureHeight : (ushort)256;
+                    width = target.Width > 0 ? target.Width : defaultWidth;
+                    height = target.Height > 0 ? target.Height : defaultHeight;
                 }
 
                 if (target.Scale > 1)
